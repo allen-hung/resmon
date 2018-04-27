@@ -1,0 +1,95 @@
+[General]
+# Profile name. Default: same the config filename with extension removed. 
+Profile=resources
+
+# Log file
+LogFile=/var/log/resmon.log
+
+# LogLevel: 0: fatal, 1: error (default), 2: info, 3: debug
+LogLevel=2
+
+# DefaultTimeout: timeout in seconds for all commands (start/stop/monitor/...)
+# Default: 30
+DefaultTimeout=30
+
+[Resource]
+# Resource name; this field is mandatory
+Name=example
+
+# Start the resource on system start-up. Valid values: yes, no (default)
+AutoStart=yes
+
+# The delay time in seconds to start the resource, if AutoStart=yes, since
+# the daemon is started. Default: 0 
+StartDelay=0
+
+# The retry times to start resource in case the earlier start failed.
+# Default: 1
+StartRetryTimes=3
+
+# The delay time in seconds before the next retry of starting. The value
+# must not less than StartTimeout. Default: same as StartTimeout
+StartRetryInterval=60
+
+# Path to the resouce RA file
+# The default value is "/etc/resmon/resource/{resource name}"
+Path=/etc/resmon/resource/example
+
+# Enable or disable monitor resource health state by polling the resource.
+# Valid value: yes, no (default)
+Monitor=yes
+
+# Monitor polling interval in seconds. This field is mandatory if the resource
+# monitoring is yes. Its value must not less than MonitorTimeout.
+MonitorInterval=60
+
+# The delay time in seconds to begin monitor polling since the 
+# resource is started or recovered. Default: same as MonitorInterval 
+MonitorDelay=60
+
+# Monitor polling times. 9999 (default) specifies infinite times
+MonitorTimes=9999
+
+# The threshold of the monitor value which indicates resource failure
+# Legal values: 1 - 100, default: 50
+MonitorThreshold=50
+
+# The times the threshold should be exceeded to perform action. For example,
+# "2,3" specifies it should meet threshold at least 2 times in the most 
+# recent 3 monitor commands to action. Default: 1, which means "1,1"
+MonitorThresholdTimes=2,3
+
+# The default monitor value if it fails to run monitor command.
+# If this value is specified equal to or higher than MonitorThreshold,
+# a monitor command failure will be considered as a failure of the resource
+# itself. Legal values: 0 (default) - 100
+MonitorDefault=0
+
+# Timeout for monitor command. Default value is DefaultTimeout
+MonitorTimeout=10
+
+# Action when the condition is met: none, recover, alert (default)
+Action=recover
+
+# Timeout for recover command. Default value is DefaultTimeout
+RecoverTimeout=10
+
+# The retry times to recover resource, in case the earlier recovery failed.
+# Default: 1
+RecoverRetryTimes=3
+
+# The delay time in seconds before the next retry of recovering. The value
+# must not less than RecoverTimeout. Default: same as RecoverTimeout
+RecoverRetryInterval=60
+
+# Timeout for start command. Default value is DefaultTimeout
+StartTimeout=10
+
+# Timeout for stop command. Default value is DefaultTimeout
+StopTimeout=10
+
+# Timeout for restart command. Default value is StartTimeout + StopTimeout
+RestartTimeout=20
+
+# Timeout for status command. Default value is DefaultTimeout
+StatusTimeout=10

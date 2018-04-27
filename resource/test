@@ -1,0 +1,20 @@
+#!/bin/bash
+
+. /usr/lib/resmon/resmon-functions
+
+if [ "$1" = "start" ]; then
+    echo "start is called"
+    sleep 4
+    exit 0
+elif [ "$1" = "monitor" ]; then
+    sleep 1
+    log_error "this is a test from monitor"
+    set_monitor_value "51"
+    exit 0
+elif [ "$1" = "recover" ]; then
+    sleep 3
+    exit 1
+fi
+
+exit 1
+

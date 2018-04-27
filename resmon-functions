@@ -1,0 +1,18 @@
+# Copyright (c) 2018 Allen Hung
+# All rights reserved.
+#
+#
+
+log_error() {
+    if [ "$RESMOND_MESSAGE_FILE" != "" ]; then
+        echo "$1" >> "$RESMOND_MESSAGE_FILE"
+    fi
+}
+
+set_monitor_value() {
+    if [ "$RESMOND_MONITOR_VALUE_FILE" != "" ]; then
+        echo -e "$1\c" > "$RESMOND_MONITOR_VALUE_FILE"
+    else
+        log_error "RESMOND_MONITOR_VALUE_FILE presents null"
+    fi
+}
