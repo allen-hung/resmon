@@ -6,7 +6,7 @@ import traceback
 from resource import admin_dir
 from log import LogDebug, LogInfo, LogError, LogFatal
 from common import _enum_, command_magic_word, SocketServer, PacketPool, reply_magic_word, payload_to_packet
-from resource import State, ResourceState
+from resource import MachineState, ResourceState
 
 Command = _enum_(
     "SHOW_PROFILE",
@@ -40,11 +40,11 @@ class CommandProcessor(threading.Thread):
         for res in self.daemon.resources:
             state = ResourceState.rev_map[res.res_state]
             action = ""
-            if res.state is State.AUTOSTART:
+            if res.state is MachineState.AUTOSTART:
                 action = ", being atuto-started"
-            elif res.state is State.RECOVER:
+            elif res.state is MachineState.RECOVER:
                 action = ", under recovery"
-            elif res.state is State.MONITOR:
+            elif res.state is MachineState.MONITOR:
                 action = ", under monitoring"
             head = "  [" + res.name + "] "
             pad = " " * (30-len(head)) if len(head) < 30 else ""
@@ -59,10 +59,10 @@ class CommandProcessor(threading.Thread):
         res = found[0]
         if res.res_state == ResourceState.STARTED:
             return "{} is already started".format(name)
-
-        if res.state not in [State.START, State.AUTOSTART, State.RECOVER, State.MONITOR]:
+        conflicted_states = [MachineState.START, MachineState.AUTOSTART, MachineState.RECOVER]
+        if res.state not in conflicted_states and res.res_state != ResourceState.STARTED:
             res.info("resource is to be started by command")
-            res.state = State.START
+            res.state = MachineState.START
         return "ok"
 
     def do_stop_resource(self, name):
@@ -75,7 +75,7 @@ class CommandProcessor(threading.Thread):
             return "{} is already stopped".format(name)
 
         res.info("resource is to be stopped by command")
-        res.state = State.STOP
+        res.state = MachineState.STOP
         return "ok"
 
     def do_show_resource(self, name):
@@ -89,20 +89,19 @@ class CommandProcessor(threading.Thread):
         reply += "Resource name: {}\n".format(res.name)
         reply += "    State:  {}\n".format(ResourceState.rev_map[res.res_state])
         action = ""
-        if res.state is State.AUTOSTART:
+        if res.state is MachineState.AUTOSTART:
             action = " (do atuto-starting)"
-        elif res.state is State.RECOVER:
+        elif res.state is MachineState.RECOVER:
             action = " (do recovery)"
-        elif res.state is State.MONITOR:
+        elif res.state is MachineState.MONITOR:
             action = " (do monitoring)"
-        reply += "    Daemon: {}{}\n".format(State.rev_map[res.state], action)
+        reply += "    Daemon: {}{}\n".format(MachineState.rev_map[res.state], action)
         reply += "    Events:\n"
         """ grep the log file """
         try:
             filename = self.profile.logfile.name
             log = open(filename, "r")
             current_session = "[{}]: ".format(os.getpid())
-            current_session = "[29939]: "
             resource_name = "[{}] ".format(res.name)
             debug_pattern = current_session + "<debug>"
             for line in log:

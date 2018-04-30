@@ -5,8 +5,8 @@ import sys
 import struct
 import binascii
 import socket
-import tempfile
 import select
+import glob
 from common import admin_dir, command_magic_word, payload_to_packet, PacketPool, reply_magic_word
 from command import Command
 from config import id_regex
@@ -20,6 +20,7 @@ from config import id_regex
     PL:  0~N bytes, arbitrary payload data
     CRC: 4 bytes, the CRC of command packet
 """
+
 program_name = "resmon-cli"
 
 usage = """{0}: command line interface to interact with the running resmon daemons
@@ -58,8 +59,12 @@ def print_usage(error=None):
 def to_payload(command, data=""):
     return struct.pack("H", command) + data
 
-def issue_command(profile, command, data=""):
+def issue_profile_command(profile, command, data=""):
     domain_name = admin_dir + "/profile-{}.sock".format(profile)
+    return issue_command(domain_name, command, data)
+
+def issue_command(domain_name, command, data=""):
+    #domain_name = admin_dir + "/profile-{}.sock".format(profile)
     payload = to_payload(command, data)
     packet = payload_to_packet(command_magic_word, payload)
     my_addr = admin_dir + "/cli-{}.sock".format(binascii.b2a_hex(os.urandom(4)))
@@ -70,8 +75,7 @@ def issue_command(profile, command, data=""):
     except socket.error, msg:
         if os.path.exists(my_addr):
             os.unlink(my_addr)
-        print_error("failed to connect:", msg)
-        sys.exit(1)
+        raise RuntimeError("failed to connect: " + msg)
 
     pool = PacketPool(reply_magic_word)
     reply = ""
@@ -106,23 +110,45 @@ def print_reply(data):
         print data
 
 def show_profile(name):
-    reply = issue_command(name, Command.SHOW_PROFILE)
-    print_reply(reply)
+    try:
+        reply = issue_profile_command(name, Command.SHOW_PROFILE)
+        print_reply(reply)
+    except Execption as e:
+        print_error(e)
 
 def show_resource(name):
     index = name.find(':')
     profile = name[:index]
-    reply = issue_command(profile, Command.SHOW_RESOURCE, name)
-    print_reply(reply)
+    try:
+        reply = issue_profile_command(profile, Command.SHOW_RESOURCE, name)
+        print_reply(reply)
+    except Execption as e:
+        print_error(e)
 
 def show_all_profiles():
-    print "show all profile is not implemented"
+    profiles = glob.glob("/var/run/resmon/profile-*.sock")
+    replies = []
+    for p in profiles:
+        try:
+            replies.append(issue_command(p, Command.SHOW_PROFILE))
+        except:
+            pass
+
+    if len(replies) == 0:
+        print "No resmond process is found"
+    else:
+        for reply in replies:
+            if reply is not replies[0]: print
+            print_reply(reply)
 
 def start_resource(name):
     index = name.find(':')
     profile = name[:index]
-    reply = issue_command(profile, Command.START_RESOURCE, name)
-    print_reply(reply)
+    try:
+        reply = issue_profile_command(profile, Command.START_RESOURCE, name)
+        print_reply(reply)
+    except Execption as e:
+        print_error(e)
 
 def stop_profile(name):
     print "stop profile: is not implemented"
@@ -130,8 +156,11 @@ def stop_profile(name):
 def stop_resource(name):
     index = name.find(':')
     profile = name[:index]
-    reply = issue_command(profile, Command.STOP_RESOURCE, name)
-    print_reply(reply)
+    try:
+        reply = issue_profile_command(profile, Command.STOP_RESOURCE, name)
+        print_reply(reply)
+    except Execption as e:
+        print_error(e)
 
 def stop_all_profiles():
     print "stop all profiles is not implemented"

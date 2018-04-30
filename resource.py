@@ -9,7 +9,7 @@ import tempfile
 from log import LogDebug, LogInfo, LogError, LogFatal
 from common import _enum_, admin_dir
 
-State = _enum_(
+MachineState = _enum_(
     "BEGIN",
     "START",
     "STOP",
@@ -27,6 +27,7 @@ ResourceState = _enum_(
     "STARTED",
     "STOPPED",
     "FAILED",
+    "NONE"
 )
 
 class Command(object):
@@ -129,19 +130,19 @@ def SimpleMethodState(fn):
 def StartedState(self):
     self.res_state = ResourceState.STARTED
     if self.config.Monitor:
-        self.state = State.MONITOR
+        self.state = MachineState.MONITOR
     else:
-        self.state = State.IDLE
+        self.state = MachineState.IDLE
 
 @SimpleMethodState
 def StoppedState(self):
     self.res_state = ResourceState.STOPPED
-    self.state = State.IDLE
+    self.state = MachineState.IDLE
 
 @SimpleMethodState
 def FailedState(self):
     self.res_state = ResourceState.FAILED
-    self.state = State.IDLE
+    self.state = MachineState.IDLE
 
 @SimpleMethodState
 def IdleState(self):
@@ -161,14 +162,14 @@ class BeginState(BaseState):
             ret = self.command.run("status", self.config.StatusTimeout)
             if ret == 0:
                 self.debug("resource is already started")
-                self.res.state = State.STARTED
+                self.res.state = MachineState.STARTED
             else:
                 self.debug("resource is not started")
+                self.res.res_state = ResourceState.STOPPED
                 if self.config.AutoStart:
-                    self.res.res_state = ResourceState.STOPPED
-                    self.res.state = State.AUTOSTART
+                    self.res.state = MachineState.AUTOSTART
                 else:
-                    self.res.state = State.STOPPED
+                    self.res.state = MachineState.STOPPED
 
         self.command = Command(self.res)
         timer = threading.Timer(0, begin_task, [])
@@ -221,16 +222,16 @@ class MonitorState(BaseState):
             """ Go to recover and pause monitor """
             if self.config.Action == "recover":
                 self.error("recovering resource now")
-                self.res.state = State.RECOVER
+                self.res.state = MachineState.RECOVER
             elif self.config.Action == "alert":
                 self.error("alerting for resource failure")
                 self.res.do_alert()
                 # MONITOR => FAILED
-                self.res.state = State.FAILED
+                self.res.state = MachineState.FAILED
             else:
                 self.error("do nothing on resource failure")
                 # MONITOR => STARTED
-                self.res.state = State.STARTED # go on and just like nothing happened
+                self.res.state = MachineState.STARTED # go on and just like nothing happened
 
         def monitor_task():
             self.timer = None
@@ -259,7 +260,7 @@ class MonitorState(BaseState):
                 self.left_counter -= 1
                 if self.left_counter <= 0:
                     # MONITOR => IDLE
-                    self.res.state = State.IDLE
+                    self.res.state = MachineState.IDLE
                     return
                 elapsed_time = time.time() - start_time
                 delay = self.config.MonitorInterval - elapsed_time
@@ -270,7 +271,7 @@ class MonitorState(BaseState):
         self.left_counter = self.initial_counter
         if self.left_counter == 0:
             # MONITOR => IDLE
-            self.res.state = State.IDLE
+            self.res.state = MachineState.IDLE
             return
         self.info("resource is under monitoring")
         self.command = Command(self.res)
@@ -290,8 +291,8 @@ class RecoverState(BaseState):
     def __init__(self, res):
         super(RecoverState, self).__init__(res)
         self.retry_max = res.config.RecoverRetryTimes
-        self.timer = None
         self.lock = threading.Lock()
+        self.timer = None
         self.command = None
 
     def enter(self):
@@ -302,14 +303,14 @@ class RecoverState(BaseState):
             if ret == 0:
                 self.info("resource is recovered successfully")
                 # RECOVER => STARTED
-                self.res.state = State.STARTED
+                self.res.state = MachineState.STARTED
                 return
 
             self.retry += 1
             if self.retry >= self.retry_max:
                 self.error("failed to recover resource for {} times, resource aborted!".format(self.retry_max))
                 # RECOVER => FAILED
-                self.res.state = State.FAILED
+                self.res.state = MachineState.FAILED
                 return
 
             """ Schedule next timer for monitor """
@@ -324,9 +325,9 @@ class RecoverState(BaseState):
                 self.timer = threading.Timer(delay, recover_task, [])
                 self.timer.start()
 
+        self.res.res_state = ResourceState.FAILED
         self.info("resource is to be recovered")
         self.command = Command(self.res)
-        self.res.res_state = ResourceState.FAILED
         self.abort = False
         self.retry = 0
         self.timer = threading.Timer(0, recover_task, [])
@@ -357,13 +358,13 @@ class AutoStartState(BaseState):
             if ret == 0:
                 self.info("resource is started successfully")
                 # AUTOSTART => STARTED
-                self.res.state = State.STARTED
+                self.res.state = MachineState.STARTED
                 return
 
             if retry >= self.retry_max:
                 self.error("failed to start resource for {} times, resource aborted!".format(self.retry_max))
                 # AUTOSTART => FAILED
-                self.res.state = State.FAILED
+                self.res.state = MachineState.FAILED
                 return
 
             """ Schedule timer for next start """
@@ -404,11 +405,11 @@ class StartState(BaseState):
             if ret == 0:
                 self.info("resource is started successfully")
                 # START => STARTED
-                self.res.state = State.STARTED
+                self.res.state = MachineState.STARTED
             else:
                 self.error("failed to start resource")
                 # START => FAILED
-                self.res.state = State.FAILED
+                self.res.state = MachineState.FAILED
 
         self.command = Command(self.res)
         timer = threading.Timer(0, start_task, [])
@@ -432,7 +433,7 @@ class StopState(BaseState):
             else:
                 self.error("failed to stop resource")
             # STOP => STOPPED
-            self.res.state = State.STOPPED
+            self.res.state = MachineState.STOPPED
 
         self.command = Command(self.res)
         timer = threading.Timer(0, stop_task, [])
@@ -450,16 +451,16 @@ class ResourceMachine(threading.Thread):
         self.config = res_config
         self.machine_lock = threading.Lock()
         self.sem = threading.Semaphore(0)
-        self._res_state = ResourceState.STOPPED
-        self._state = None
+        self._res_state = ResourceState.NONE
+        self._mac_state = None
 
     @property
     def state(self):
-        return self._state
+        return self._mac_state
 
     @state.setter
     def state(self, state):
-        self._state = state
+        self._mac_state = state
         self.sem.release()
 
     @property
@@ -468,8 +469,9 @@ class ResourceMachine(threading.Thread):
 
     @res_state.setter
     def res_state(self, state):
-        self._res_state = state
-        self.info("resource is {}".format(ResourceState.rev_map[state]))
+        if state != self._res_state:
+            self._res_state = state
+            self.info("resource is {}".format(ResourceState.rev_map[state]))
 
     def info(self, *args):
         LogInfo("[{}] ".format(self.name), *args)
@@ -481,48 +483,48 @@ class ResourceMachine(threading.Thread):
         LogError("[{}] ".format(self.name), *args)
 
     def cancel(self):
-        self.state = State.EXIT
+        self.state = MachineState.EXIT
 
     def do_alert(self):
         self.info("alert for resource failure, not implemented")
 
     def run(self):
         self.states = {
-            State.BEGIN:     BeginState(self),
-            State.START:     StartState(self),
-            State.STOP:      StopState(self),
-            State.STARTED:   StartedState(self),
-            State.STOPPED:   StoppedState(self),
-            State.AUTOSTART: AutoStartState(self),
-            State.FAILED:    FailedState(self),
-            State.MONITOR:   MonitorState(self),
-            State.RECOVER:   RecoverState(self),
-            State.IDLE:      IdleState(self),
-            State.EXIT:      ExitState(self)
+            MachineState.BEGIN:     BeginState(self),
+            MachineState.START:     StartState(self),
+            MachineState.STOP:      StopState(self),
+            MachineState.STARTED:   StartedState(self),
+            MachineState.STOPPED:   StoppedState(self),
+            MachineState.AUTOSTART: AutoStartState(self),
+            MachineState.FAILED:    FailedState(self),
+            MachineState.MONITOR:   MonitorState(self),
+            MachineState.RECOVER:   RecoverState(self),
+            MachineState.IDLE:      IdleState(self),
+            MachineState.EXIT:      ExitState(self)
         }
 
         def get_state_obj(state):
             if state in self.states:
                 return self.states[state]
-            self.debug("state class is undefined for {}".format(State.rev_map[state]))
+            self.debug("state class is undefined for {}".format(MachineState.rev_map[state]))
             return None
 
         self.debug("thread is created for resource")
-        self.state = State.BEGIN
+        self.state = MachineState.BEGIN
         last_state = None
 
-        while self.state != State.EXIT:
+        while self.state != MachineState.EXIT:
             self.sem.acquire()
             """ leave the previous state """
             if last_state:
-                self.debug("leave {} state".format(State.rev_map[last_state]))
+                self.debug("leave {} state".format(MachineState.rev_map[last_state]))
                 obj = get_state_obj(last_state)
                 if obj:
                     obj.leave()
             last_state = self.state
 
             """ enter the previous state """
-            self.debug("enter {} state".format(State.rev_map[self.state]))
+            self.debug("enter {} state".format(MachineState.rev_map[self.state]))
             obj = get_state_obj(self.state)
             if obj:
                 obj.enter()
