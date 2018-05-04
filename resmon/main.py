@@ -56,7 +56,7 @@ def parsing_args():
 
     return filename
 
-def main():
+def resmond():
     global program_name
     program_name = os.path.split(sys.argv[0])[1]
     config_filename = parsing_args()

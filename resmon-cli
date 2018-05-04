@@ -7,9 +7,9 @@ import binascii
 import socket
 import select
 import glob
-from common import admin_dir, command_magic_word, payload_to_packet, PacketPool, reply_magic_word
-from command import Command
-from config import id_regex
+from resmon.common import admin_dir, command_magic_word, payload_to_packet, PacketPool, reply_magic_word
+from resmon.command import Command
+from resmon.config import id_regex
 
 """
     Command packet:
