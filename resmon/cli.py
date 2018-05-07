@@ -7,6 +7,7 @@ import binascii
 import socket
 import select
 import glob
+import errno
 from resmon.common import admin_dir, command_magic_word, payload_to_packet, PacketPool, reply_magic_word
 from resmon.command import Command
 from resmon.config import id_regex
@@ -61,7 +62,15 @@ def to_payload(command, data=""):
 
 def issue_profile_command(profile, command, data=""):
     domain_name = admin_dir + "/profile-{}.sock".format(profile)
-    return issue_command(domain_name, command, data)
+    try:
+        reply = issue_command(domain_name, command, data)
+    except socket.error as e:
+        print_error("Failed to connect: ", e)
+        sys.exit(e.errno)
+    except Exception as e:
+        print_error(e)
+        sys.exit(e.errno)
+    return reply
 
 def issue_command(domain_name, command, data=""):
     #domain_name = admin_dir + "/profile-{}.sock".format(profile)
@@ -72,10 +81,10 @@ def issue_command(domain_name, command, data=""):
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.bind(my_addr)
         sock.connect(domain_name)
-    except socket.error, msg:
+    except socket.error as e:
         if os.path.exists(my_addr):
             os.unlink(my_addr)
-        raise RuntimeError("failed to connect: " + msg)
+        raise e
 
     pool = PacketPool(reply_magic_word)
     reply = ""
@@ -110,29 +119,30 @@ def print_reply(data):
         print data
 
 def show_profile(name):
-    try:
-        reply = issue_profile_command(name, Command.SHOW_PROFILE)
-        print_reply(reply)
-    except Execption as e:
-        print_error(e)
+    reply = issue_profile_command(name, Command.SHOW_PROFILE)
+    print_reply(reply)
 
 def show_resource(name):
     index = name.find(':')
     profile = name[:index]
-    try:
-        reply = issue_profile_command(profile, Command.SHOW_RESOURCE, name)
-        print_reply(reply)
-    except Execption as e:
-        print_error(e)
+    reply = issue_profile_command(profile, Command.SHOW_RESOURCE, name)
+    print_reply(reply)
 
 def show_all_profiles():
     profiles = glob.glob("/var/run/resmon/profile-*.sock")
     replies = []
     for p in profiles:
         try:
-            replies.append(issue_command(p, Command.SHOW_PROFILE))
-        except:
-            pass
+            reply = issue_command(p, Command.SHOW_PROFILE)
+            replies.append(reply)
+        except Exception as e:
+            # The error of ECONNREFUSED will be ignored
+            if e.errno == errno.EACCES:
+                print_error("Permission denied. Are you root?")
+                sys.exit(e.errno)
+            elif e.errno != errno.ECONNREFUSED:
+                print_error(e)
+                sys.exit(e.errno)
 
     if len(replies) == 0:
         print "No resmond process is found"
@@ -144,11 +154,8 @@ def show_all_profiles():
 def start_resource(name):
     index = name.find(':')
     profile = name[:index]
-    try:
-        reply = issue_profile_command(profile, Command.START_RESOURCE, name)
-        print_reply(reply)
-    except Execption as e:
-        print_error(e)
+    reply = issue_profile_command(profile, Command.START_RESOURCE, name)
+    print_reply(reply)
 
 def stop_profile(name):
     print "stop profile: is not implemented"
@@ -156,11 +163,8 @@ def stop_profile(name):
 def stop_resource(name):
     index = name.find(':')
     profile = name[:index]
-    try:
-        reply = issue_profile_command(profile, Command.STOP_RESOURCE, name)
-        print_reply(reply)
-    except Execption as e:
-        print_error(e)
+    reply = issue_profile_command(profile, Command.STOP_RESOURCE, name)
+    print_reply(reply)
 
 def stop_all_profiles():
     print "stop all profiles is not implemented"
@@ -218,9 +222,5 @@ def parsing_args():
     else:
         print_usage("unknown command: {}".format(cmd))
 
-def main():
-    global program_name
-    config_filename = parsing_args()
-
-if __name__ == "__main__":
-    main()
+def cli_main():
+    parsing_args()
