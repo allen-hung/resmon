@@ -1,0 +1,6 @@
+#!/usr/bin/python
+
+import resmon.cli
+
+if __name__ == "__main__":
+    resmon.cli.cli_main()
